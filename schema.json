@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Tri-daily record",
+  "type": "object",
+  "required": ["date", "slot", "summary_md", "one_liner", "sources"],
+  "properties": {
+    "date": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "slot": {
+      "type": "string",
+      "enum": ["morning", "noon", "close"]
+    },
+    "summary_md": {"type": "string"},
+    "one_liner": {
+      "type": "string",
+      "maxLength": 80
+    },
+    "sources": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  },
+  "additionalProperties": false
+}
