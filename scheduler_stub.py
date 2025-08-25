@@ -8,12 +8,19 @@ from __future__ import annotations
 import datetime as dt
 import sched
 import subprocess
+import sys
 import time
 
 
 def schedule_run(s: sched.scheduler, hour: int, minute: int, slot: str) -> None:
     def task() -> None:
-        subprocess.run(["python", "runner.py", "--slot", slot], check=False)
+        result = subprocess.run(["python", "runner.py", "--slot", slot], capture_output=True, text=True)
+        stamp = dt.datetime.now().isoformat(timespec="seconds")
+        print(f"[{stamp}] {slot} exit code: {result.returncode}")
+        if result.stdout:
+            print(result.stdout)
+        if result.stderr:
+            print(result.stderr, file=sys.stderr)
         # 下一天同一时间再次执行
         s.enter(24 * 3600, 1, task)
 

@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """三次自动分析运行脚本。
 
-步骤（需开发者补全数据抓取与 LLM 调用）：
-1. 获取行情上下文。
-2. 载入对应提示词。
-3. 调用 LLM 生成 Markdown。
-4. 校验输出并写入日志与 CSV。
-"""
+流程：
+1. 读取行情上下文；
+2. 根据时间段载入提示词；
+3. 调用 LLM 生成 Markdown；
+4. 校验并写入日志与 CSV。
+
+代码中已提供基础实现，开发者只需提供 LLM API key 即可运行。"""
 from __future__ import annotations
 
 import argparse
@@ -18,6 +19,11 @@ import re
 import sys
 from pathlib import Path
 from typing import List
+
+try:
+    import openai
+except ImportError:  # pragma: no cover - optional dependency
+    openai = None
 
 BASE_DIR = Path(__file__).resolve().parent
 PROMPTS_DIR = BASE_DIR / "prompts"
@@ -42,9 +48,20 @@ def load_prompt(slot: str) -> str:
 
 
 def call_llm(prompt: str, context: str) -> str:
-    """调用 LLM 返回 Markdown。实际实现需开发者补全。"""
-    # TODO: 接入实际的 LLM 服务
-    return "# TODO\n"
+    """调用 OpenAI API 返回 Markdown。"""
+    if openai is None:
+        raise RuntimeError("缺少 openai 库")
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("未配置 OPENAI_API_KEY")
+    openai.api_key = api_key
+    prompt_text = prompt.replace("{context}", context)
+    resp = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": prompt_text}],
+        temperature=0,
+    )
+    return resp.choices[0].message["content"].strip()
 
 
 def validate_close(md: str) -> None:
@@ -98,22 +115,37 @@ def update_csv(date: dt.date, slot: str, one_liner: str, md_path: Path, sources:
         writer.writerows(rows)
 
 
+def read_context(path: Path) -> str:
+    if path.exists():
+        return path.read_text(encoding="utf-8")
+    return ""
+
+
+def extract_one_liner(md: str) -> str:
+    for line in md.splitlines():
+        line = line.strip()
+        if line and not re.match(r"^\d{4}年\d{2}月\d{2}日", line):
+            return line[:80]
+    return ""
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Tri-daily analysis runner")
     parser.add_argument("--slot", choices=["morning", "noon", "close"], help="时间段")
+    parser.add_argument("--context", default="context.md", help="行情上下文文件")
     args = parser.parse_args()
 
     slot = args.slot or detect_slot()
     date = dt.date.today()
 
     try:
-        context = ""  # TODO: 获取行情上下文
+        context = read_context(Path(args.context))
         prompt = load_prompt(slot)
         md = call_llm(prompt, context)
         if slot == "close":
             validate_close(md)
         md_path = write_markdown(date, slot, md)
-        update_csv(date, slot, "TODO", md_path, [])
+        update_csv(date, slot, extract_one_liner(md), md_path, [])
     except Exception as e:  # noqa: BLE001
         print(f"错误: {e}", file=sys.stderr)
         return 1
